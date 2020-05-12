@@ -29,10 +29,11 @@ class Player {
 	    }
 	}
 
-	private static int width;
-	private static int height;
-	private final static int COOLDOWN = 10;
-	
+	final static int COOLDOWN = 10;
+	static Graph graph;
+	static Map<Integer, Pac> myPacMap;
+	static Map<Integer, Pac> enemyPacMap;
+	static Set<Pellet> pelletList;
 	
 	static class Coordinate {
 		private int x;
@@ -73,13 +74,13 @@ class Player {
 		}
 		
 		private Double GetDistanceFrom(Coordinate pos) {
-			Integer deltaX = Math.min( Math.abs(pos.getX() - this.getX()), 
-										Math.min(pos.getX(), this.getX()) + width - Math.max(pos.getX(), this.getX()));
-			Integer deltaY = Math.min( Math.abs(pos.getY() - this.getY()), 
-					Math.min(pos.getX(), this.getY()) + width - Math.max(pos.getY(), this.getY()));
-
-			Double distance = Math.sqrt(Math.pow(deltaX, 2)+Math.pow(deltaY, 2));
-			return distance;
+//			Integer deltaX = Math.min( Math.abs(pos.getX() - this.getX()), 
+//										Math.min(pos.getX(), this.getX()) + maze.getHeight() - Math.max(pos.getX(), this.getX()));
+//			Integer deltaY = Math.min( Math.abs(pos.getY() - this.getY()), 
+//					Math.min(pos.getX(), this.getY()) + maze.getWidth() - Math.max(pos.getY(), this.getY()));
+//
+//			Double distance = Math.sqrt(Math.pow(deltaX, 2)+Math.pow(deltaY, 2));
+			return 0.0;
 		}
 	}
 	
@@ -238,18 +239,83 @@ class Player {
 		}
 	}
 
+	static class Graph {
+	    private static final int ROAD = 0;
+	    private static final int WALL = 1;
+	    
+	    private int width;
+	    private int height;
+
+	    private int[][] maze;
+	    private boolean[][] visited;
+
+	    public Graph(int width, int height) {
+	        this.width = width;
+	        this.height = height;
+	        maze = new int[height][width];
+	        visited = new boolean[height][width];
+	    }
+
+	    public int getHeight() {
+	        return height;
+	    }
+
+	    public int getWidth() {
+	        return width;
+	    }
+
+	    public boolean isExplored(int row, int col) {
+	        return visited[row][col];
+	    }
+
+	    public boolean isWall(int row, int col) {
+	        return maze[row][col] == WALL;
+	    }
+
+	    public void setVisited(int row, int col, boolean value) {
+	        visited[row][col] = value;
+	    }
+
+	    public boolean isValidLocation(int row, int col) {
+	        if (row < 0 || row >= getHeight() || col < 0 || col >= getWidth()) {
+	            return false;
+	        }
+	        return true;
+	    }
+
+	    public void reset() {
+	        for (int i = 0; i < visited.length; i++)
+	            Arrays.fill(visited[i], false);
+	    }
+
+		public void addRow(String row, int nRow) {
+			int col = 0;
+			for (char ch:row.toCharArray()) {
+				if (ch == '#')
+					maze[nRow][col] = WALL;
+				else if (ch == ' ') {
+					maze[nRow][col] = ROAD;
+					pelletList.add(new Pellet(new Coordinate(col, nRow), 1));
+				}
+				col++;
+			}
+		}
+	}
+	
     public static void main(String args[]) {
-    	Map<Integer, Pac> myPacMap = new HashMap<>();
-    	Map<Integer, Pac> enemyPacMap = new HashMap<>();
-    	List<Pellet> pelletList = new ArrayList<>();
+    	myPacMap = new HashMap<>();
+    	enemyPacMap = new HashMap<>();
+    	pelletList = new HashSet<>();
         Scanner in = new Scanner(System.in);
-        width = in.nextInt(); // size of the grid
-        height = in.nextInt(); // top left corner is (x=0, y=0)
+        graph = new Graph(in.nextInt(), in.nextInt());
+
         if (in.hasNextLine()) {
             in.nextLine();
         }
-        for (int i = 0; i < height; i++) {
+        
+        for (int i = 0; i < graph.getHeight(); i++) {
             String row = in.nextLine(); // one line of the grid: space " " is floor, pound "#" is wall
+            graph.addRow(row, i);
         }
 
         // game loop
@@ -266,24 +332,29 @@ class Player {
                 PacType typeId = PacType.valueOf(in.next()); // unused in wood leagues
                 int speedTurnsLeft = in.nextInt(); // unused in wood leagues
                 int abilityCooldown = in.nextInt(); // unused in wood leagues
-                
-                if (!mine) continue;
- 
-                Pac p = myPacMap.get(pacId);
+                Pac p = mine ? myPacMap.get(pacId) : enemyPacMap.get(pacId);
                 if (p == null) {
                 	p = new Pac(pacId, mine, new Coordinate(x,y), typeId, speedTurnsLeft, abilityCooldown);
-                	myPacMap.put(pacId, p);
+                	if (mine) myPacMap.put(pacId, p); else enemyPacMap.put(pacId, p);
+                } else {
+                	p.setPosition(new Coordinate(x, y));
+            		p.setAbilityCooldown(abilityCooldown);
+            		p.setSpeedTurnsLeft(speedTurnsLeft);
+            		p.setTypeId(typeId);
                 }
-                p.setPosition(new Coordinate(x, y));
-                p.setAbilityCooldown(abilityCooldown);
             }
             int visiblePelletCount = in.nextInt(); // all pellets in sight
             for (int i = 0; i < visiblePelletCount; i++) {
+            	List<Pellet> tempPellet = new ArrayList<>();
                 int x = in.nextInt();
                 int y = in.nextInt();
                 int value = in.nextInt(); // amount of points this pellet is worth
                 Pellet p = new Pellet(new Coordinate(x, y), value);
-                pelletList.add(p);
+                if (value == 10) {
+                	pelletList.remove(p);
+                	pelletList.add(p);
+                }
+                tempPellet.add(p);
             }
             StringBuffer sb = new StringBuffer();
             for (Pac p:myPacMap.values()) {
