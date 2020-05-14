@@ -342,10 +342,13 @@ class Player {
             		p.setSpeedTurnsLeft(speedTurnsLeft);
             		p.setTypeId(typeId);
                 }
+                //Se c'è un Pac non c'è un pellet
+                pelletList.remove(new Pellet(p.getPosition(), 0));
             }
             int visiblePelletCount = in.nextInt(); // all pellets in sight
             for (int i = 0; i < visiblePelletCount; i++) {
-            	List<Pellet> tempPellet = new ArrayList<>();
+            	//List of pellet seen in this round
+            	Set<Pellet> tempPellet = new HashSet<>();
                 int x = in.nextInt();
                 int y = in.nextInt();
                 int value = in.nextInt(); // amount of points this pellet is worth
@@ -355,6 +358,7 @@ class Player {
                 	pelletList.add(p);
                 }
                 tempPellet.add(p);
+                updatePellet(tempPellet);
             }
             StringBuffer sb = new StringBuffer();
             for (Pac p:myPacMap.values()) {
@@ -409,6 +413,19 @@ class Player {
             System.out.println(sb.toString());
         }
     }
+
+	private static void updatePellet(Set<Pellet> tempPellet) {
+		for (Pac p: myPacMap.values()) {
+			//Lista delle coordinate viste dal Pac TODO Riempi
+			Set<Coordinate> coordPacSee = new HashSet<>();
+			for (Coordinate c:coordPacSee) {
+				if (!tempPellet.contains(new Pellet(c, 0))) {
+					pelletList.remove(new Pellet(c, 0));
+				}
+			}
+		}
+		
+	}
 
 	
 }
