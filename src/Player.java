@@ -4,11 +4,69 @@ import java.util.stream.Collectors;
 import java.io.*;
 import java.math.*;
 
+
+/* Da implementare nei prossimi giorni
+ * Metodo che calcoli value di Pellet presunto su A-B pathValue / pathValuePondered
+ * Algoritmo di valutazione priorita, quante caselle indagare, come ponderare distanza e value e speed findBestRoute
+ * 
+ * 
+ * Ricerca di nemici nelle vicinanze e soglia di pericolosità (si appoggia su metodo del grafo che calcola percorso)
+ */
+
 /**
  * Grab the pellets as fast as you can!
  **/
 class Player {
+	static class BFSSolver {
+	    private static final int[][] DIRECTIONS = { { 0, 1 }, { 1, 0 }, { 0, -1 }, { -1, 0 } };
+
+	    public List<Coordinate> solve(Graph graph, Coordinate source, Coordinate target) {
+	        LinkedList<Coordinate> nextToVisit = new LinkedList<>();
+	        nextToVisit.add(source);
+
+	        while (!nextToVisit.isEmpty()) {
+	            Coordinate cur = nextToVisit.remove();
+
+	            if (!graph.isValidLocation(cur.getX(), cur.getY()) || graph.isExplored(cur.getX(), cur.getY())) {
+	                continue;
+	            }
+
+	            if (graph.isWall(cur.getX(), cur.getY())) {
+	            	graph.setVisited(cur.getX(), cur.getY(), true);
+	                continue;
+	            }
+
+	            if (target.equals(new Coordinate(cur.getX(), cur.getY()))) {
+	                return backtrackPath(cur);
+	            }
+
+	            for (int[] direction : DIRECTIONS) {
+	                Coordinate coordinate = new Coordinate(cur.getX() + direction[0], cur.getY() + direction[1], cur);
+	                if (!graph.isValidLocation(coordinate.getX(), coordinate.getY())) {
+	                	coordinate.setX( coordinate.getX() >= 0? coordinate.getX(): graph.getWidth()-1);
+	                	coordinate.setY( coordinate.getY() >= 0? coordinate.getY(): graph.getHeight()-1);
+	                }
+	                nextToVisit.add(coordinate);
+	                graph.setVisited(cur.getX(), cur.getY(), true);
+	            }
+	        }
+	        return Collections.emptyList();
+	    }
+
+	    private List<Coordinate> backtrackPath(Coordinate cur) {
+	        List<Coordinate> path = new ArrayList<>();
+	        Coordinate iter = cur;
+
+	        while (iter != null) {
+	            path.add(iter);
+	            iter = iter.parent;
+	        }
+
+	        return path;
+	    }
+	}
 	
+	//Enum per i tipi di pacman con metodo per comparare
 	enum PacType {
 	    ROCK, PAPER, SCISSORS;
 
@@ -20,34 +78,52 @@ class Player {
 	            return another == ROCK;
 	        case SCISSORS:
 	            return another == PAPER;
-	        // note: see alternative below
+	        
 	        default:
 	            throw new IllegalStateException();
 	        }
-	        // alternatively, just throw here without the default case
-	        // throw new IllegalStateException();
+	        
 	    }
 	}
 
-	final static int COOLDOWN = 10;
+	//Costanti del gioco e strutture dati accessibili ovunque
+	private final static int COOLDOWN = 10;
+	private static final int safeDistance = 2;
+	private static final int minSpread = 0;
 	static Graph graph;
 	static Map<Integer, Pac> myPacMap;
 	static Map<Integer, Pac> enemyPacMap;
-	static Set<Pellet> pelletList;
+	static Map<Pellet, Integer> pelletList;
+	static Set<Coordinate> myDestinations;
 	
+	//Classe coordinate, utilizzata da tutte le altre classi, la distanza tra due coordinate viene calcolata sul grafo (TODO)
 	static class Coordinate {
 		private int x;
 		private int y;
+		Coordinate parent;
+		
 		public int getX() {
 			return x;
 		}
 		public int getY() {
 			return y;
 		}
+		public void setX(int x) {
+			this.x = x;
+		}
+		public void setY(int y) {
+			this.y = y;
+		}
 		public Coordinate(int x, int y) {
 			super();
 			this.x = x;
 			this.y = y;
+		}
+		public Coordinate(int x, int y, Coordinate parent) {
+			super();
+			this.x = x;
+			this.y = y;
+			this.parent = parent;
 		}
 		@Override
 		public int hashCode() {
@@ -84,6 +160,7 @@ class Player {
 		}
 	}
 	
+	//Classe per i Pac
 	static class Pac {
 		private int pacId;
 		private boolean mine;
@@ -145,6 +222,7 @@ class Player {
 		public void sendTo(Coordinate c, StringBuffer sb) {
 			this.destination = c;
 			this.busy = true;
+			myDestinations.add(c);
 			sb.append("MOVE "+this.getPacId()+" "+c.getX()+" "+c.getY()+"|");
 		}
 
@@ -157,6 +235,7 @@ class Player {
 		}
 
 		public void targetReached() {
+			myDestinations.remove(this.destination);
 			this.busy = false;
 			this.destination = null;
 		}
@@ -193,9 +272,11 @@ class Player {
 
 		public void increaseSpeed(StringBuffer sb) {
 			sb.append("SPEED "+this.getPacId()+"|");
+			this.abilityCooldown = COOLDOWN;
 		}
 	}
 	
+	//Classe per i Pellet, semplicemente Coordinate e value, equals considera solo coordinate, non possono esistere 2 pellet nella stessa cella
 	static class Pellet {
 		private Coordinate coordinate;
 		private Integer value;
@@ -234,6 +315,7 @@ class Player {
 			return true;
 		}
 
+		// Restituisce la distanza calcolata sul grafo, si appoggia al metodo di Coordinate
 		public Double GetDistanceFrom(Coordinate pos) {
 			return this.coordinate.GetDistanceFrom(pos);
 		}
@@ -246,13 +328,13 @@ class Player {
 	    private int width;
 	    private int height;
 
-	    private int[][] maze;
+	    private int[][] graph;
 	    private boolean[][] visited;
 
 	    public Graph(int width, int height) {
 	        this.width = width;
 	        this.height = height;
-	        maze = new int[height][width];
+	        graph = new int[height][width];
 	        visited = new boolean[height][width];
 	    }
 
@@ -264,24 +346,28 @@ class Player {
 	        return width;
 	    }
 
-	    public boolean isExplored(int row, int col) {
+	    public boolean isExplored(int col, int row) {
 	        return visited[row][col];
 	    }
 
-	    public boolean isWall(int row, int col) {
-	        return maze[row][col] == WALL;
+	    public boolean isWall(int col, int row) {
+	        return graph[row][col] == WALL;
 	    }
 
-	    public void setVisited(int row, int col, boolean value) {
+	    public void setVisited(int col, int row, boolean value) {
 	        visited[row][col] = value;
 	    }
 
-	    public boolean isValidLocation(int row, int col) {
+	    public boolean isValidLocation(int col, int row) {
 	        if (row < 0 || row >= getHeight() || col < 0 || col >= getWidth()) {
 	            return false;
 	        }
 	        return true;
 	    }
+	    
+	    public boolean isValidPath(Coordinate target) {
+			return (this.isValidLocation(target.getX(), target.getY()) && !this.isWall(target.getX(), target.getY()));
+		}
 
 	    public void reset() {
 	        for (int i = 0; i < visited.length; i++)
@@ -292,20 +378,57 @@ class Player {
 			int col = 0;
 			for (char ch:row.toCharArray()) {
 				if (ch == '#')
-					maze[nRow][col] = WALL;
+					graph[nRow][col] = WALL;
 				else if (ch == ' ') {
-					maze[nRow][col] = ROAD;
-					pelletList.add(new Pellet(new Coordinate(col, nRow), 1));
+					graph[nRow][col] = ROAD;
+					pelletList.put(new Pellet(new Coordinate(col, nRow), 1), 1);
 				}
 				col++;
 			}
+		}
+		//Return a Set of coordinates seen from source
+		public void getAdiacent(Coordinate source, Set<Coordinate> pathSet) {
+			int x = source.getX();
+			int y = source.getY();
+			while (this.isValidLocation(x, y) && !this.isWall(x, y)) {
+				pathSet.add(new Coordinate(x,y));
+				x++;
+			}
+			x = source.getX()-1;
+			while (this.isValidLocation(x, y) && !this.isWall(x, y)) {
+				pathSet.add(new Coordinate(x,y));
+				x--;
+			}
+			x = source.getX();
+			y = source.getY()+1;
+			while (this.isValidLocation(x, y) && !this.isWall(x, y)) {
+				pathSet.add(new Coordinate(x,y));
+				y++;
+			}
+			y = source.getY()-1;
+			while (this.isValidLocation(x, y) && !this.isWall(x, y)) {
+				pathSet.add(new Coordinate(x,y));
+				y--;
+			}		
+		}
+		
+		public Set<Coordinate> getValidCoordinates() {
+			Set<Coordinate> res = new HashSet<>();
+			for (int i = 0; i<width; i++) {
+				for(int j = 0; j<height; j++) {
+					if (this.isValidLocation(i, j) && !this.isWall(i, j))
+						res.add(new Coordinate(i, j));
+				}
+			}
+			return res;
 		}
 	}
 	
     public static void main(String args[]) {
     	myPacMap = new HashMap<>();
     	enemyPacMap = new HashMap<>();
-    	pelletList = new HashSet<>();
+    	pelletList = new HashMap<>();
+    	myDestinations = new HashSet<>();
         Scanner in = new Scanner(System.in);
         graph = new Graph(in.nextInt(), in.nextInt());
 
@@ -316,11 +439,12 @@ class Player {
         for (int i = 0; i < graph.getHeight(); i++) {
             String row = in.nextLine(); // one line of the grid: space " " is floor, pound "#" is wall
             graph.addRow(row, i);
+            System.err.println("Grafo creato");
+            System.err.println(graph.getHeight()+" "+graph.getWidth());
         }
 
         // game loop
         while (true) {
-            pelletList.clear();
             int myScore = in.nextInt();
             int opponentScore = in.nextInt();
             int visiblePacCount = in.nextInt(); // all your pacs and enemy pacs in sight
@@ -343,7 +467,7 @@ class Player {
             		p.setTypeId(typeId);
                 }
                 //Se c'è un Pac non c'è un pellet
-                pelletList.remove(new Pellet(p.getPosition(), 0));
+                pelletList.put(new Pellet(p.getPosition(), 0), 0);
             }
             int visiblePelletCount = in.nextInt(); // all pellets in sight
             for (int i = 0; i < visiblePelletCount; i++) {
@@ -354,77 +478,136 @@ class Player {
                 int value = in.nextInt(); // amount of points this pellet is worth
                 Pellet p = new Pellet(new Coordinate(x, y), value);
                 if (value == 10) {
-                	pelletList.remove(p);
-                	pelletList.add(p);
+                	pelletList.put(p, p.GetValue());
                 }
                 tempPellet.add(p);
                 updatePellet(tempPellet);
             }
             StringBuffer sb = new StringBuffer();
             for (Pac p:myPacMap.values()) {
-            	boolean cmd = false;
-            	if (p.getPosition().equals(p.getDestination()) && p.isBusy()) {
+            	//Controllo e aggiorno il mio PAC
+            	//Se il Pac era in viaggio ed è arrivato, aggiorno
+            	if (p.getPosition().equals(p.getDestination()) && p.isBusy())
             		p.targetReached();
-            	}
-            	for (Pac pEnemy:enemyPacMap.values()) {
-            		if (p.getPosition().GetDistanceFrom(pEnemy.getPosition()) <= 2) {
-            			if (!p.getTypeId().beats(pEnemy.getTypeId()) && p.getAbilityCooldown() == 0) {
-            				p.switchTo(pEnemy.getTypeId(), sb);
-            				cmd = true;
-            				break;
-            			}
-            		}
-            	}
+            	
+            	//Analisi dei nemici
+            	Pac enemy = findClosestEnemy(p);
+            	boolean safe = Objects.isNull(enemy);
+            	
+            	//Se il Pac è in viaggio e la strada vale >= x
+	        		//Aggiorno lastPosition
+	        		//continue
+            	if (p.isBusy() && !p.isColliding() && safe/*&& pathValue(p.getPosition(), p.getDestination()) >= soglia*/) {
+            		p.setLastPosition(p.getPosition());
+            		p.sendTo(p.getDestination(), sb);
+            		continue;
+            	}      
+            	
+            	//Se ho mana
             	if (p.getAbilityCooldown() == 0) {
-            		p.increaseSpeed(sb);
-            		cmd = true;
+            		if (safe)
+            			p.increaseSpeed(sb);
+            		else {
+            			// Mi difendo
+            			PacType newType = null;
+            			for (PacType pt:PacType.values()) {
+            				if (pt.beats(enemy.getTypeId()))
+            					newType = pt;
+            			}
+            			p.switchTo(newType, sb);
+            		}
+            			
+            	//Se non ho mana
+            	} else { 
+            		Coordinate destination;
+            		if (safe) {
+            			destination = findBestRoute(p.getPosition(), p.getSpeedTurnsLeft());
+            		} else {
+            			// Mi allontano random dal nemico di almeno 2 volte la distanza da lui (soglia del safe)
+            			Random rand = new Random();
+            			do {
+	            			int safeX = (2*p.getPosition().getX() - enemy.getPosition().getX()*(rand.nextInt(1)+1));
+	            			int safeY = (2*p.getPosition().getY() - enemy.getPosition().getY()*(rand.nextInt(1)+1));
+	            			destination = new Coordinate(safeX, safeY);
+            			} while (!graph.isValidPath(destination));
+            		}
+            		if (Objects.isNull(destination))
+            			p.sendTo(destination, sb);
             	}
-            	if (cmd) continue;
-            	// Se non si sta muovendo o ha subito una collisione, trova nuovo percorso
-            	if ((!p.isBusy() || p.isColliding())) {
-            		List<Pellet> bigPelletList = pelletList
-            				  .stream()
-            				  .filter(o -> o.GetValue() == 10)
-            				  .sorted((o1, o2) -> o1.GetDistanceFrom(p.getPosition()).compareTo(o2.GetDistanceFrom(p.getPosition())))
-            				  .collect(Collectors.toList());
-            		
-            		List<Pellet> smallPelletList = pelletList
-          				  .stream()
-          				  .filter(o -> o.GetValue() != 10)
-          				  .sorted((o1, o2) -> o1.GetDistanceFrom(p.getPosition()).compareTo(o2.GetDistanceFrom(p.getPosition())))
-          				  .collect(Collectors.toList());
-            		Random rand = new Random();
-            		Coordinate randC = new Coordinate( p.getPosition().getX() + rand.nextInt(2)- 1,  p.getPosition().getY() + rand.nextInt(2)- 1);
-            		Coordinate c = bigPelletList.isEmpty() ? (smallPelletList.isEmpty() ? randC : smallPelletList.get(0).coordinate) : bigPelletList.get(0).coordinate;
-            		p.sendTo(c, sb);
-            		pelletList.remove(new Pellet(c, 0));
-            	// Altrimenti prosegui
-            	} else {
-                    p.sendTo(p.getDestination(), sb);
-                }
-            	//Aggiorna ultima posizione
             	p.setLastPosition(p.getPosition());
-            }
+            }           
             
-            
+            // Se ci sono comandi, trimma (Se non ci sono perchè? Ti droghi? )
             if (sb.length() != 0)
             	sb.deleteCharAt(sb.length()-1);
             
             System.out.println(sb.toString());
         }
     }
-
+    private static Coordinate findBestRoute(Coordinate position, int speedTurnsLeft) {
+		BFSSolver bfs = new BFSSolver();
+		Coordinate best = null;
+		double bestValue = 0.0;
+		for (int i = 0; i < graph.getWidth(); i++) {
+			for (int j = 0; j <graph.getHeight(); j++) {
+				if ( !graph.isValidLocation(i, j)) continue;
+				
+				List<Coordinate> path = bfs.solve(graph, position, new Coordinate(i, j));
+				graph.reset();
+				double value = 0.0;
+				
+				//Eventuale max Length
+				
+				for (Coordinate c:path)
+					value+= pelletList.get(new Pellet(c, 0));
+				
+				value = value / Math.min(0, (path.size() - speedTurnsLeft));
+				
+				//Eventuale soglia
+				
+				//Eventuale controllo su zone
+				boolean farFromOthers = true;
+				for (Coordinate c:myDestinations) {
+					if (bfs.solve(graph, position, c).size() <= minSpread) {
+						farFromOthers = false;
+						graph.reset();
+						break;
+					}
+					graph.reset();
+				}
+				
+				if (value > bestValue && farFromOthers)
+					best = new Coordinate(i, j);
+				
+			}
+		}
+		return best;
+	}
+	private static Pac findClosestEnemy(Pac p) {
+		Coordinate c = p.getPosition();
+		Pac enemy = null;
+		for (Pac e:enemyPacMap.values()) {
+			BFSSolver bfs = new BFSSolver();
+			if (bfs.solve(graph, c, e.getPosition()).size() <= safeDistance) {
+				graph.reset();
+				enemy = e;
+				break;
+			}
+			graph.reset();
+		}
+		return enemy;
+	}
+	//Aggiorno la mappa dei Pellet togliendo quelli che non vedo più
 	private static void updatePellet(Set<Pellet> tempPellet) {
 		for (Pac p: myPacMap.values()) {
-			//Lista delle coordinate viste dal Pac TODO Riempi
 			Set<Coordinate> coordPacSee = new HashSet<>();
+			graph.getAdiacent(p.getPosition(), coordPacSee);
 			for (Coordinate c:coordPacSee) {
 				if (!tempPellet.contains(new Pellet(c, 0))) {
-					pelletList.remove(new Pellet(c, 0));
+					pelletList.put(new Pellet(c, 0), 0);
 				}
 			}
 		}
-		
 	}
 
 	
