@@ -34,6 +34,7 @@ class Player {
 	            }
 
 	            if (target.equals(new Coordinate(cur.getX(), cur.getY()))) {
+//	            	dp.in
 	                return backtrackPath(cur);
 	            }
 
@@ -93,6 +94,8 @@ class Player {
 	static Map<Integer, Pac> enemyPacMap;
 	static Map<Coordinate, Integer> pelletList;
 	static Set<Coordinate> myDestinations;
+	
+//	static Map<Coordinate, Map<Coordinate,List<Coordinate>>> dp = new HashMap<Coordinate, HashMap>();
 	
 	//Classe coordinate, utilizzata da tutte le altre classi, la distanza tra due coordinate viene calcolata sul grafo (TODO)
 	static class Coordinate {
@@ -261,13 +264,13 @@ class Player {
 		public void switchTo(PacType newType, StringBuffer sb) {
 			switch (newType) {
 	        case ROCK:
-	            this.typeId = PacType.PAPER;
+	            this.typeId = PacType.ROCK;
 	            break;
 	        case PAPER:
-	            this.typeId = PacType.SCISSORS;
+	            this.typeId = PacType.PAPER;
 	            break;
 	        case SCISSORS:
-	            this.typeId = PacType.ROCK;
+	            this.typeId = PacType.SCISSORS;
 	            break;
 	        default:
 	            throw new IllegalStateException();
@@ -414,6 +417,8 @@ class Player {
             int myScore = in.nextInt();
             int opponentScore = in.nextInt();
             int visiblePacCount = in.nextInt(); // all your pacs and enemy pacs in sight
+            Set<Integer> tempPacSet = new HashSet<>();
+            Set<Integer> tempEnemyPacSet = new HashSet<>();
             for (int i = 0; i < visiblePacCount; i++) {
                 int pacId = in.nextInt(); // pac number (unique within a team)
                 boolean mine = in.nextInt() != 0; // true if this pac is yours
@@ -422,6 +427,7 @@ class Player {
                 PacType typeId = PacType.valueOf(in.next()); // unused in wood leagues
                 int speedTurnsLeft = in.nextInt(); // unused in wood leagues
                 int abilityCooldown = in.nextInt(); // unused in wood leagues
+                if (mine) tempPacSet.add(pacId); else tempEnemyPacSet.add(pacId);
                 Pac p = mine ? myPacMap.get(pacId) : enemyPacMap.get(pacId);
                 if (p == null) {
                 	p = new Pac(pacId, mine, new Coordinate(x,y), typeId, speedTurnsLeft, abilityCooldown);
@@ -451,6 +457,14 @@ class Player {
             updatePellet(tempPellet);
             StringBuffer sb = new StringBuffer();
             for (Pac p:myPacMap.values()) {
+            	//Pac Dead
+            	if (!tempPacSet.contains(p.getPacId())) {
+            		p.targetReached();
+            		myPacMap.remove(p.getPacId());
+            		continue;
+            	}
+            		
+            
             	System.err.println(p.toString());
             	//Controllo e aggiorno il mio PAC
             	//Se il Pac era in viaggio ed è arrivato, aggiorno
@@ -464,6 +478,7 @@ class Player {
 	        		//Aggiorno lastPosition
 	        		//continue
             	if (p.isBusy() && !p.isColliding() && safe/*&& pathValue(p.getPosition(), p.getDestination()) >= soglia*/) {
+            		System.err.println("Pac "+p.getPacId()+" sta proseguendo verso "+p.getDestination().toString());
             		p.setLastPosition(p.getPosition());
             		p.sendTo(p.getDestination(), sb);
             		continue;
@@ -477,6 +492,7 @@ class Player {
             			// Mi difendo
             			PacType newType = null;
             			for (PacType pt:PacType.values()) {
+                            System.err.println("Mi trasformo in "+pt.toString()+" per battere "+enemy.getTypeId().toString()+"?");
             				if (pt.beats(enemy.getTypeId()))
             					newType = pt;
             			}
@@ -485,16 +501,19 @@ class Player {
             			
             	//Se non ho mana
             	} else { 
-            		Coordinate destination;
+            		Coordinate destination = null;
             		if (safe) {
+                		System.err.println("Pac "+p.getPacId()+" sta cercando");
             			destination = findBestRoute(p.getPosition(), p.getSpeedTurnsLeft());
             		} else {
+                		System.err.println("Pac "+p.getPacId()+" è in pericolo");
             			// Mi allontano random dal nemico di almeno 2 volte la distanza da lui (soglia del safe)
             			Random rand = new Random();
             			do {
-	            			int safeX = (2*p.getPosition().getX() - enemy.getPosition().getX()*(rand.nextInt(1)+1));
-	            			int safeY = (2*p.getPosition().getY() - enemy.getPosition().getY()*(rand.nextInt(1)+1));
+	            			int safeX = (p.getPosition().getX() - enemy.getPosition().getX()*rand.nextInt(2) + (rand.nextInt(5)-2));
+	            			int safeY = (2*p.getPosition().getY() - enemy.getPosition().getY()*rand.nextInt(2) + (rand.nextInt(5)-2));
 	            			destination = new Coordinate(safeX, safeY);
+                            System.err.println("Pac "+p.getPacId()+" tenta "+destination.toString());
             			} while (!graph.isValidPath(destination));
             		}
             		if (!Objects.isNull(destination))
@@ -546,12 +565,15 @@ class Player {
 			
 			//Eventuale controllo su zone
 			boolean farFromOthers = true;
+			int count = 10;
 			for (Coordinate cDest:myDestinations) {
+				if (count < 0) break;
 				if (bfs.solve(graph, position, cDest).size() <= minSpread) {
 					farFromOthers = false;
 					graph.reset();
 					break;
 				}
+				count--;
 				graph.reset();
 			}
 			
@@ -566,7 +588,6 @@ class Player {
 		if (!Objects.isNull(best)) {
 			if (pelletList.get(best) == 10)
 	    		pelletList.put(best, 0);
-			
 		}
 
 		return best;
@@ -578,8 +599,11 @@ class Player {
 			BFSSolver bfs = new BFSSolver();
 			if (bfs.solve(graph, c, e.getPosition()).size() <= safeDistance) {
 				graph.reset();
-				enemy = e;
-				break;
+				
+                if (e.getTypeId().beats(p.getTypeId())) {
+                    enemy = e;
+                    break;
+                }
 			}
 			graph.reset();
 		}
