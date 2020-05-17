@@ -449,7 +449,7 @@ class Player {
                 int x = in.nextInt();
                 int y = in.nextInt();
                 int value = in.nextInt(); // amount of points this pellet is worth
-                if (value == 10) {
+                if (value == 10 && !myDestinations.contains(new Coordinate(x,y))) {
                 	pelletList.put(new Coordinate(x, y), value);
                 }
                 tempPellet.add(new Coordinate(x, y));
@@ -457,13 +457,13 @@ class Player {
             updatePellet(tempPellet);
             StringBuffer sb = new StringBuffer();
             for (Pac p:myPacMap.values()) {
-            	//Pac Dead
-            	if (!tempPacSet.contains(p.getPacId())) {
-            		p.targetReached();
-            		myPacMap.remove(p.getPacId());
-            		continue;
-            	}
-            		
+            	int id = p.getPacId();
+	            if (!tempPacSet.contains(id)) {
+	        		p.targetReached();
+	        		myPacMap.remove(id);
+	        	}
+            }
+            for (Pac p:myPacMap.values()) {       		
             
             	System.err.println(p.toString());
             	//Controllo e aggiorno il mio PAC
@@ -565,15 +565,12 @@ class Player {
 			
 			//Eventuale controllo su zone
 			boolean farFromOthers = true;
-			int count = 10;
 			for (Coordinate cDest:myDestinations) {
-				if (count < 0) break;
 				if (bfs.solve(graph, position, cDest).size() <= minSpread) {
 					farFromOthers = false;
 					graph.reset();
 					break;
 				}
-				count--;
 				graph.reset();
 			}
 			
