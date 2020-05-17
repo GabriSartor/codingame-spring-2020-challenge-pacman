@@ -23,6 +23,13 @@ class Player {
 
 	        while (!nextToVisit.isEmpty()) {
 	            Coordinate cur = nextToVisit.remove();
+	            Couple c = new Couple(target, cur);
+	            List<Coordinate> partial = dp.get(c);
+	            if (partial != null) {
+	            	partial.addAll(backtrackPath(cur));
+	            	dp.put(new Couple(source, target), partial);
+	                return dp.get(c);
+	            }
 
 	            if (!graph.isValidLocation(cur.getX(), cur.getY()) || graph.isExplored(cur.getX(), cur.getY())) {
 	                continue;
@@ -34,8 +41,9 @@ class Player {
 	            }
 
 	            if (target.equals(new Coordinate(cur.getX(), cur.getY()))) {
-//	            	dp.in
-	                return backtrackPath(cur);
+	            	c = new Couple(cur, source);
+	            	dp.put(c, backtrackPath(cur));
+	                return dp.get(c);
 	            }
 
 	            for (int[] direction : DIRECTIONS) {
@@ -94,8 +102,8 @@ class Player {
 	static Map<Integer, Pac> enemyPacMap;
 	static Map<Coordinate, Integer> pelletList;
 	static Set<Coordinate> myDestinations;
-	
-//	static Map<Coordinate, Map<Coordinate,List<Coordinate>>> dp = new HashMap<Coordinate, HashMap>();
+	static Map<Couple, List<Coordinate>> dp = 
+		    new HashMap<Couple, List<Coordinate>>();
 	
 	//Classe coordinate, utilizzata da tutte le altre classi, la distanza tra due coordinate viene calcolata sul grafo (TODO)
 	static class Coordinate {
@@ -166,6 +174,35 @@ class Player {
 		}
 	}
 	
+	
+	static class Couple {
+		private List<Coordinate> couple;
+		
+		public Couple(Coordinate source, Coordinate target) {
+			super();
+			couple = new LinkedList<Coordinate>();
+			couple.add(source);
+			couple.add(target);
+		}
+
+		@Override
+		public int hashCode() {
+			return Objects.hash(couple);
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			Couple other = (Couple) obj;
+			return Objects.equals(couple, other.couple);
+		}
+		
+	}
 	//Classe per i Pac
 	static class Pac {
 		@Override
